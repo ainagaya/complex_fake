@@ -1,93 +1,98 @@
 import pandas as pd
-from IPython.display import display
-
 import numpy as np
-
-data_path = "../hey-rick-this-looks-like-a-complex-fake"
-
-train_B_text = data_path + "/" + "train_B_text.csv"
-test_B_text = data_path + "/" + "test_B_text.csv"
-
-print("train_B_text: ")
-print(train_B_text)
-
-dfa_train_B = pd.read_csv(train_B_text)
-dfa_test_B = pd.read_csv(test_B_text)
-
-size_train_B = dfa_train_B.shape
-
-# Remove the Id
-dfa_train_B = dfa_train_B.drop(columns=['Id'])
-dfa_test_B = dfa_test_B.drop(columns=['Id'])
-
-display(dfa_train_B)
-
-# Split into train and validation
-size_validation = int(size_train_B[0] * 0.3)
-
-data = np.asarray(dfa_train_B)
-data_test = np.asarray(dfa_test_B)
-
-X_train = data[:size_train_B[0] - size_validation, :-1]
-# X_train is a list of lists, convert it to a list of strings
-X_train = [str(x[0]) for x in X_train]
-
-Y_train = data[:size_train_B[0] - size_validation, -1]
-
-X_validation = data[size_train_B[0] - size_validation:, :-1]
-X_validation = [str(x[0]) for x in X_validation]
-Y_validation = data[size_train_B[0] - size_validation:, -1]
-
+from IPython.display import display
 from sklearn.feature_extraction.text import CountVectorizer
-
-# We use the count number of instances considering that a word has a minimum support of two documents
-vectorizer = CountVectorizer(min_df=2, 
-# stop words such as 'and', 'the', 'of' are removed                             
- stop_words='english', 
- strip_accents='unicode')
-
-#example of the tokenization
-test_string = X_train[0]
-print ("Example: " + test_string)
-print ("Preprocessed: " + vectorizer.build_preprocessor()(test_string))
-print ("Tokenized:" + str(vectorizer.build_tokenizer()(test_string)))
-print ("Analyzed data string:" + str(vectorizer.build_analyzer()(test_string)))
-print("-----------------------------------")
-
-#Process and convert data
-X_train = vectorizer.fit_transform(X_train)
-X_validation = vectorizer.transform(X_validation)
-
-print ("Number of tokens: " + str(len(vectorizer.get_feature_names_out())) +"\n")
-print ("Extract of tokens:")
-print (vectorizer.get_feature_names_out()[1000:1100])
-
 from sklearn.naive_bayes import BernoulliNB
-nb = BernoulliNB()
-nb.fit(X_train,Y_train)
-
-prediction = nb.predict(X_validation)
-
 from sklearn.metrics import accuracy_score
-print ("Accuracy: " + str(accuracy_score(Y_validation, prediction)))
+import nltk
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
 
-# Now let's train it with the whole data, and test it with the test data
-X_train = data[:, :-1]
-X_train = [str(x[0]) for x in X_train]
-Y_train = data[:, -1]
-X_train = vectorizer.fit_transform(X_train)
+def load_data(data_path, train_file, test_file):
+    train_data = pd.read_csv(f"{data_path}/{train_file}")
+    test_data = pd.read_csv(f"{data_path}/{test_file}")
+    return train_data, test_data
 
-X_test = data_test
-X_test= [str(x[0]) for x in X_test]
-X_test = vectorizer.transform(X_test)
+def preprocess_data(train_data, test_data):
+    train_data = train_data.drop(columns=['Id'])
+    test_data = test_data.drop(columns=['Id'])
+    return train_data, test_data
 
-nb = BernoulliNB()
-nb.fit(X_train,Y_train)
+def split_data(data, validation_size):
+    data_array = np.asarray(data)
+    X = data_array[:, :-1]
+    Y = data_array[:, -1]
+    X_train = X[:-validation_size]
+    Y_train = Y[:-validation_size]
+    X_validation = X[-validation_size:]
+    Y_validation = Y[-validation_size:]
+    return X_train, Y_train, X_validation, Y_validation
 
-prediction = nb.predict(X_test)
-print("predictions: ", prediction)
+# def preprocess_with_stemming(text):
+#     words = word_tokenize(text)  # Tokenize the text
+#     stemmed_words = [stemmer.stem(word) for word in words]  # Apply stemming
+#     return ' '.join(stemmed_words)  # Join words back into a single string
 
-# Save the predictions
-df_predictions = pd.DataFrame(prediction)
-df_predictions.columns = ['Prediction']
-df_predictions.to_csv("predictions_2.csv", index=False, header=True)
+def vectorize_data(X_train, X_validation, min_df=2, stop_words='english', strip_accents='unicode'):
+    # Initialize stemmer
+    #global stemmer
+    #stemmer = PorterStemmer()
+    #X_train_preprocessed = [preprocess_with_stemming(str(x[0])) for x in X_train]
+    #X_validation_preprocessed = [preprocess_with_stemming(str(x[0])) for x in X_validation]
+    #print("X_train", X_train[10:20])
+    #print("X_train_preprocessed", X_train_preprocessed[10:20])
+    vectorizer = CountVectorizer(min_df=min_df, stop_words=stop_words, strip_accents=strip_accents)
+    #X_train = vectorizer.fit_transform([str(x[0]) for x in X_train_preprocessed])
+    #X_validation = vectorizer.transform([str(x[0]) for x in X_validation_preprocessed])
+    X_train = vectorizer.fit_transform([str(x[0]) for x in X_train])
+    X_validation = vectorizer.transform([str(x[0]) for x in X_validation])
+    return X_train, X_validation, vectorizer
+
+def train_and_evaluate(X_train, Y_train, X_validation, Y_validation):
+    nb = BernoulliNB()
+    nb.fit(X_train, Y_train)
+    prediction = nb.predict(X_validation)
+    accuracy = accuracy_score(Y_validation, prediction)
+    return nb, accuracy
+
+def main():
+    data_path = "../hey-rick-this-looks-like-a-complex-fake"
+    train_file = "train_B_text.csv"
+    test_file = "test_B_text.csv"
+
+    # Download necessary NLTK data
+    nltk.download('punkt')
+    nltk.download('punkt_tab')
+
+    
+
+    train_data, test_data = load_data(data_path, train_file, test_file)
+    display(train_data)
+
+    train_data, test_data = preprocess_data(train_data, test_data)
+    size_validation = int(train_data.shape[0] * 0.3)
+
+    X_train, Y_train, X_validation, Y_validation = split_data(train_data, size_validation)
+    X_train, X_validation, vectorizer = vectorize_data(X_train, X_validation)
+
+    nb, accuracy = train_and_evaluate(X_train, Y_train, X_validation, Y_validation)
+    print(f"Accuracy: {accuracy}")
+
+    # Train with the whole data and test with the test data
+    X_train = np.asarray(train_data)[:, :-1]
+    Y_train = np.asarray(train_data)[:, -1]
+    X_train = vectorizer.fit_transform([str(x[0]) for x in X_train])
+
+    X_test = np.asarray(test_data)
+    X_test = vectorizer.transform([str(x[0]) for x in X_test])
+
+    nb.fit(X_train, Y_train)
+    prediction = nb.predict(X_test)
+    print("predictions: ", prediction)
+
+    # Save the predictions
+    df_predictions = pd.DataFrame(prediction, columns=['Prediction'])
+    df_predictions.to_csv("predictions_2.csv", index=False, header=True)
+
+if __name__ == "__main__":
+    main()
